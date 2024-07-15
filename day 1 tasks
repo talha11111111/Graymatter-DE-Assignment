@@ -1,0 +1,61 @@
+Things I learnt on DAY 1
+
+Database creation and schema design
+Usage of DDL and DML commands
+Implementing indexing
+Modifying constraints
+Creating views
+Utilizing temporary tables and common table expressions (CTE)
+
+
+//Analyzing the Adventure works 2022 DATASET and joining two tables that give us insights of the Cost price and the selling price from the product and the sales schema// 
+
+select * from Production ProductCostHistory select * from Sales SalesOrderDetail
+select StandardCost, UnitPrice from Production. ProductCostHistory p INNER JOIN Sales. SalesOrderDetails on
+p.ProductID=s.ProductID
+
+// creating a constraint and trying to check its working //
+create database gmde 
+create schema abc
+create table abc.sales(id int, pname varchar (100), location varchar(100)) 
+insert into abc.sales values (1,'soap', 'blr') 
+insert into abc.sales values (2, 'shampoo', blr')
+insert into abc.sales values (3, 'scrub", 'bom')
+ALTER TABLE abc sales
+ADD CONSTRAINT CC_SALES_id 
+CHECK (id<5);
+insert into abc.sales values (7 'soap', 'blr')
+
+
+//creating a temporary table and trying to access it from a new query//
+create table #tt(id int)
+insert into #tt values(22312)
+select * from #tt
+
+
+
+SELECT * FROM [Person].[BusinessEntityContact];
+
+SELECT * 
+FROM [Person].[Person] AS p1 
+INNER JOIN [Person].[BusinessEntity] AS p2
+ON p1.BusinessEntityID = p2.BusinessEntityID 
+WHERE p1.BusinessEntityID < 45;
+
+CREATE VIEW vwPersonDetails AS
+SELECT [BusinessEntityID], [PersonType], [MiddleName], [rowguid]
+FROM [Person].[Person]
+WHERE [BusinessEntityID] < 20;
+
+SELECT * FROM vwPersonDetails;
+
+SELECT * FROM [Person].[PhoneNumberType];
+
+INSERT INTO [Person].[PhoneNumberType]([Name]) VALUES('xyz');
+
+SELECT * FROM [Person].[ContactType];
+
+ALTER TABLE [Person].[ContactType]
+ADD Newcol2 VARCHAR(25);
+
+SELECT * FROM [Person].[ContactType];
