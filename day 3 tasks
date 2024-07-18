@@ -1,0 +1,150 @@
+-- Create a table for tracking changes in employee addresses
+CREATE TABLE dbo.EmployeeChanges (
+    EmployeeID INT,
+    Address VARCHAR(100),
+    ChangeDate DATETIME,
+    OldChangeDate DATETIME,
+    NewChangeDate DATETIME,
+    PreviousAddress VARCHAR(100)
+);
+
+-- Insert initial data
+INSERT INTO dbo.EmployeeChanges (EmployeeID, Address, ChangeDate)
+VALUES (1, 'Laggere', GETDATE()),
+       (2, 'Lahhere', GETDATE()),
+       (3, 'Lasere', GETDATE());
+
+-- Update address for EmployeeID 1 (SCD Type 1)
+UPDATE dbo.EmployeeChanges
+SET Address = 'Baghira'
+WHERE EmployeeID = 1;
+
+-- View the updated data (SCD Type 1)
+SELECT * FROM dbo.EmployeeChanges;
+
+-- Alter table to include historical tracking columns
+ALTER TABLE dbo.EmployeeChanges
+ADD NewChangeDate DATETIME,
+    OldChangeDate DATETIME;
+
+-- Insert a new record with updated address for EmployeeID 1 (SCD Type 2)
+INSERT INTO dbo.EmployeeChanges (EmployeeID, Address, NewChangeDate)
+VALUES (1, 'Laggere', (SELECT ChangeDate FROM dbo.EmployeeChanges WHERE EmployeeID = 1));
+
+-- Update the record to mark the change (SCD Type 2)
+UPDATE dbo.EmployeeChanges
+SET ChangeDate = GETDATE(),
+    OldChangeDate = NULL
+WHERE EmployeeID = 1 AND OldChangeDate IS NOT NULL;
+
+-- Delete the obsolete record for EmployeeID 1 (SCD Type 2)
+DELETE FROM dbo.EmployeeChanges
+WHERE EmployeeID = 1 AND Address = 'Laggere';
+
+-- View the updated data (SCD Type 2)
+SELECT * FROM dbo.EmployeeChanges;
+
+-- Add a column for previous addresses (SCD Type 3)
+ALTER TABLE dbo.EmployeeChanges
+ADD PreviousAddress VARCHAR(100);
+
+-- Update previous address for EmployeeID 1 (SCD Type 3)
+UPDATE dbo.EmployeeChanges
+SET PreviousAddress = (SELECT Address FROM dbo.EmployeeChanges WHERE EmployeeID = 1 AND OldChangeDate IS NULL)
+WHERE EmployeeID = 1;
+
+-- View the updated data (SCD Type 3)
+SELECT * FROM dbo.EmployeeChanges;
+
+-- Enable change data capture on the usertbl table in the gme schema
+EXEC sys.sp_cdc_enable_table
+    @source_schema = N'gme',
+    @source_name = N'usertbl',
+    @role_name = NULL;
+
+-- View change data in the CDC table
+SELECT * FROM cdc.gme_usertbl_CT;
+
+-- Insert a new record into usertbl
+INSERT INTO gme.usertbl (UserID, UserName, Password, Phone)
+VALUES (3, 'rakeshadiga', 'nanu', '8904020630');
+
+-- Delete a record from usertbl
+DELETE FROM gme.usertbl WHERE UserID = 1;
+
+-- View updated data in usertbl
+SELECT * FROM gme.usertbl;
+
+-- Create a function to extract the local part of an email address
+CREATE FUNCTION dbo.GetLocalPartFromEmail (
+    @EmailAddress NVARCHAR(255)
+)
+RETURNS NVARCHAR(255)
+AS
+BEGIN
+    DECLARE @LocalPart NVARCHAR(255);
+    
+    -- Extract the local part (substring before '@')
+    SET @LocalPart = SUBSTRING(@EmailAddress, 1, CHARINDEX('@', @EmailAddress) - 1);
+    
+    -- Return the local part
+    RETURN @LocalPart;
+END;
+GO
+
+-- Test the function with sample data
+SELECT dbo.GetLocalPartFromEmail(EmailAddress) AS LocalPart
+FROM Person.EmailAddress;
+
+SELECT dbo.GetLocalPartFromEmail('hskfch@adventures.com') AS LocalPart;
+
+-- Create a schema for managing customer data
+CREATE SCHEMA Sales;
+
+-- Create a dimension table for customers
+CREATE TABLE Sales.CustomerDim (
+    CustomerID INT PRIMARY KEY,
+    Name VARCHAR(100),
+    Address VARCHAR(200)
+);
+
+-- Insert initial data into the customer dimension
+INSERT INTO Sales.CustomerDim (CustomerID, Name, Address)
+VALUES
+    (1, 'John Doe', '123 Main St'),
+    (2, 'Jane Smith', '456 Elm St'),
+    (3, 'Michael Johnson', '789 Oak St');
+
+-- Create a temporary table to stage customer data updates
+CREATE TABLE #CustomerTemp (
+    CustomerID INT PRIMARY KEY,
+    Name VARCHAR(100),
+    Address VARCHAR(200)
+);
+
+-- Insert rows into the temporary table for customer updates
+INSERT INTO #CustomerTemp (CustomerID, Name, Address)
+VALUES
+    (1, 'John Doe', '123 Main St'),   
+    (2, 'Jane Johnson', '456 Elm St'), 
+    (4, 'Anna Lee', '890 Pine St');
+
+-- Perform MERGE statement to synchronize data between CustomerDim and #CustomerTemp
+MERGE INTO Sales.CustomerDim AS target
+USING #CustomerTemp AS source
+ON target.CustomerID = source.CustomerID
+WHEN MATCHED THEN
+    UPDATE SET
+        target.Name = source.Name,
+        target.Address = source.Address
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (CustomerID, Name, Address)
+    VALUES (source.CustomerID, source.Name, source.Address)
+WHEN NOT MATCHED BY SOURCE THEN
+    DELETE;
+
+-- View the updated data in the customer dimension after MERGE
+SELECT * FROM Sales.CustomerDim;
+
+-- Clean up: Drop the temporary table
+DROP TABLE #CustomerTemp;
