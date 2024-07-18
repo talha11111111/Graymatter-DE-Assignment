@@ -1,0 +1,180 @@
+-- Create a table for logging insertions, updates, and deletions
+CREATE TABLE dbo.ChangeLog (
+    LogID INT IDENTITY(1,1) PRIMARY KEY,
+    TableName NVARCHAR(100),
+    ActionType NVARCHAR(50),
+    ActionDate DATETIME,
+    ActionBy NVARCHAR(100)
+);
+
+-- Drop table statement for ChangeLog
+DROP TABLE dbo.ChangeLog;
+
+-- Trigger for logging after insert
+CREATE TRIGGER trg_AfterInsert
+ON Sales.Customer
+AFTER INSERT
+AS
+BEGIN
+    INSERT INTO dbo.ChangeLog(TableName, ActionType, ActionDate, ActionBy)
+    VALUES ('Sales.Customer', 'INSERT', GETDATE(), SUSER_SNAME());
+END;
+
+-- Trigger for logging after update
+CREATE TRIGGER trg_AfterUpdate
+ON Sales.Customer
+AFTER UPDATE
+AS
+BEGIN
+    INSERT INTO dbo.ChangeLog(TableName, ActionType, ActionDate, ActionBy)
+    VALUES ('Sales.Customer', 'UPDATE', GETDATE(), SUSER_SNAME());
+END;
+
+-- Trigger for logging after delete
+CREATE TRIGGER trg_AfterDelete
+ON Sales.Customer
+AFTER DELETE
+AS
+BEGIN
+    INSERT INTO dbo.ChangeLog(TableName, ActionType, ActionDate, ActionBy)
+    VALUES ('Sales.Customer', 'DELETE', GETDATE(), SUSER_SNAME());
+END;
+
+-- Example usage: Insert into Sales.Customer
+INSERT INTO Sales.Customer (PersonID) VALUES (1);
+
+-- Example usage: Delete from Sales.Customer
+DELETE FROM Sales.Customer WHERE CustomerID = 1;
+
+-- Example usage: Update Sales.Customer
+UPDATE Sales.Customer SET PersonID = 8960 WHERE StoreID = 934;
+
+-- Select from the ChangeLog to see logged actions
+SELECT * FROM dbo.ChangeLog;
+
+-- Create a function to calculate total hours from vacation and sick leave hours
+CREATE FUNCTION dbo.CalculateTotalDays (
+    @VacationHours DECIMAL(10,2),
+    @SickLeaveHours DECIMAL(10,2)
+)
+RETURNS DECIMAL(10,2)
+AS
+BEGIN
+    DECLARE @TotalDays DECIMAL(10,2);
+    SET @TotalDays = (@VacationHours + @SickLeaveHours) / 24.0;
+    RETURN @TotalDays;
+END;
+
+-- Example usage: Calculate total days from vacation and sick leave hours
+SELECT LoginID, JobTitle, VacationHours, SickLeaveHours, dbo.CalculateTotalDays(VacationHours, SickLeaveHours) AS TotalDays
+FROM HumanResources.Employee;
+
+-- Create a function to retrieve customer information based on city
+CREATE FUNCTION dbo.GetCustomerInfo (
+    @City NVARCHAR(100)
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT CustomerID, CustomerName, City
+    FROM Sales.Customer
+    WHERE City = @City
+);
+
+-- Example usage: Get customer information for 'New York'
+SELECT * FROM dbo.GetCustomerInfo('New York');
+
+-- Start a transaction for inventory transfer
+BEGIN TRANSACTION;
+
+-- Variables for warehouse IDs and quantity to transfer
+DECLARE @FromWarehouseID INT = 1;
+DECLARE @ToWarehouseID INT = 2;
+DECLARE @ProductID INT = 5;
+DECLARE @QuantityToTransfer INT = 10;
+
+-- Perform inventory transfer
+UPDATE Production.ProductInventory
+SET Quantity = Quantity - @QuantityToTransfer
+WHERE ProductID = @ProductID AND LocationID = @FromWarehouseID;
+
+INSERT INTO Production.ProductInventory (ProductID, LocationID, Shelf, Bin, Quantity)
+VALUES (@ProductID, @ToWarehouseID, 'A', '1', @QuantityToTransfer);
+
+-- Commit the transaction if successful
+COMMIT TRANSACTION;
+PRINT 'Inventory transfer completed successfully';
+
+-- Clean up: Drop temporary table if it exists
+IF OBJECT_ID('tempdb..#Temp', 'U') IS NOT NULL
+    DROP TABLE #Temp;
+
+-- Create a temporary table to store sales order details
+CREATE TABLE #Temp (
+    SalesOrderID INT,
+    OrderDate DATETIME,
+    TotalDue DECIMAL(10,2)
+);
+
+-- Create a table to log changes in sales orders
+CREATE TABLE dbo.SalesOrderChangeLog (
+    ChangeID INT IDENTITY(1,1) PRIMARY KEY,
+    SalesOrderID INT,
+    OldTaxAmt MONEY,
+    NewTaxAmt MONEY,
+    ChangeDate DATETIME
+);
+
+-- Procedure to finalize changes in sales orders
+CREATE PROCEDURE dbo.FinalizeSalesOrderChange (
+    @CustomerID INT,
+    @SalesOrderID INT,
+    @NewTax MONEY
+)
+AS
+BEGIN
+    BEGIN TRANSACTION;
+    
+    DECLARE @TotalSales DECIMAL(10,2);
+
+    -- Calculate total sales for the customer
+    SELECT @TotalSales = SUM(soh.SubTotal)
+    FROM Sales.Customer c
+    INNER JOIN Sales.SalesOrderHeader soh ON c.CustomerID = soh.CustomerID
+    WHERE c.CustomerID = @CustomerID;
+
+    PRINT @TotalSales;
+
+    -- Insert sales order details into temporary table
+    INSERT INTO #Temp
+    SELECT SalesOrderID, OrderDate, TotalDue
+    FROM Sales.SalesOrderHeader
+    WHERE SalesOrderID = @SalesOrderID;
+
+    -- Update tax amount in sales order header
+    UPDATE Sales.SalesOrderHeader
+    SET TaxAmt = @NewTax
+    WHERE SalesOrderID = @SalesOrderID;
+
+    -- Commit transaction
+    COMMIT TRANSACTION;
+END;
+
+-- Example execution of the procedure to finalize sales order change
+EXEC dbo.FinalizeSalesOrderChange @CustomerID = 29825, @SalesOrderID = 43659, @NewTax = 768;
+
+-- Trigger to log changes after update in sales order header
+CREATE TRIGGER trg_AfterUpdateSalesOrder
+ON Sales.SalesOrderHeader
+AFTER UPDATE
+AS
+BEGIN
+    INSERT INTO dbo.SalesOrderChangeLog (SalesOrderID, OldTaxAmt, NewTaxAmt, ChangeDate)
+    SELECT i.SalesOrderID, d.TaxAmt, i.TaxAmt, GETDATE()
+    FROM inserted i
+    INNER JOIN deleted d ON i.SalesOrderID = d.SalesOrderID;
+END;
+
+-- Select from SalesOrderChangeLog to see logged changes
+SELECT * FROM dbo.SalesOrderChangeLog;
