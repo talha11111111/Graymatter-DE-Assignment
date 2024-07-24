@@ -1,0 +1,197 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import functools
+from datetime import datetime, timedelta
+
+# 1. Data Manipulation with Pandas:
+
+# Given dataset
+sales_data = pd.DataFrame({
+    'Item': ['Item X', 'Item Y', 'Item Z', 'Item X', 'Item Y', 'Item Z'],
+    'Amount': [10, 20, 30, 15, 25, 35],
+    'Date': ['1-7-2024', '1-7-2024', '1-7-2024', '2-8-2024', '2-8-2024', '2-8-2024']
+})
+
+# Remove rows with missing values
+sales_data.dropna(inplace=True)
+
+# Group the data by 'Item' and calculate total sales for each item
+grouped_sales = sales_data.groupby(['Item']).sum().sort_values(by='Amount', ascending=False)
+
+# Create a pivot table showing sum of sales for each item, by month
+sales_data['Date'] = pd.to_datetime(sales_data['Date'])
+sales_data['month'] = sales_data['Date'].dt.month
+pivot_table_sales = sales_data.pivot_table(values='Amount', index='Item', columns='month', aggfunc='sum', fill_value=0)
+
+# 2. Data Cleaning:
+
+inventory_data = {
+    'ID': [101, 102, 103, 104],
+    'Product': ['Product A', 'Product B', 'Product C', 'Product D'],
+    'Price': [25.50, 40.75, 19.99, np.NaN],
+    'Available': [True, False, True, True],
+    'Launch': ['2023-5-4', '2023-6-15', '2023-7-6', '2023-8-5']
+}
+
+inventory_df = pd.DataFrame(inventory_data)
+
+# Fill numeric NaNs with the mean of their column
+inventory_df.fillna(value=int(inventory_df['Price'].mean()), inplace=True)
+
+# Convert all product names to lowercase
+inventory_df['Product'] = inventory_df['Product'].str.lower()
+
+# Function to remove outliers from a numeric column using IQR method
+def remove_outliers(df, column, threshold):
+    df = df[df[column] >= threshold]
+    return df
+
+# 3. Lambda Functions and Map-Reduce:
+
+# Use lambda function to filter out odd numbers from a list of integers
+numbers_list = [12, 65, 54, 39, 102, 339, 221, 50, 70]
+filtered_numbers = list(filter(lambda x: (x % 2 == 0), numbers_list))
+product_of_numbers = functools.reduce(lambda a, b: a * b, filtered_numbers)
+
+# Use lambda function with filter to remove words shorter than 4 characters and concatenate remaining words
+words_list = ['happy', 'abhi', 'ruth', 'cat', 'dog']
+filtered_words = list(filter(lambda x: len(x) >= 4, words_list))
+concatenated_words = functools.reduce(lambda a, b: a + ' ' + b, filtered_words)
+
+# 4. Data Visualization:
+
+# Line chart showing revenue trend over time
+revenue_data = {
+    'Date': ['2024-01-01', '2024-01-01', '2024-02-01', '2024-02-01', '2024-03-01'],
+    'ID': [101, 102, 101, 103, 102],
+    'Product': ['Product A', 'Product B', 'Product A', 'Product C', 'Product B'],
+    'Quantity': [50, 30, 70, 20, 90],
+    'Amount': [500, 300, 700, 200, 900],
+    'Customer': ['C001', 'C002', 'C003', 'C001', 'C004'],
+    'Region': ['North', 'South', 'East', 'West', 'North']
+}
+
+revenue_df = pd.DataFrame(revenue_data)
+plt.plot(revenue_df['Date'], revenue_df['Amount'])
+plt.xlabel("time")
+plt.ylabel("revenue")
+plt.title("Revenue Trend over Time")
+plt.show()
+
+# Scatter plot with trend line
+x_values = [5, 7, 8, 7, 2, 17, 2, 9, 4, 11, 12, 9, 6]
+y_values = [99, 86, 87, 88, 100, 86, 103, 87, 94, 78, 77, 85, 86]
+plt.scatter(x_values, y_values)
+plt.xlabel("X-axis")
+plt.ylabel("Y-axis")
+plt.title("Scatter Plot with Trend Line")
+plt.plot(np.unique(x_values), np.poly1d(np.polyfit(x_values, y_values, 1))(np.unique(x_values)), color='red')
+plt.show()
+
+# 5. Data Aggregation:
+
+# Given a list of dictionaries representing transactions, aggregate total amount spent by each customer
+transactions_data = [
+    {'Customer': 'C001', 'Amount': 500},
+    {'Customer': 'C002', 'Amount': 300},
+    {'Customer': 'C003', 'Amount': 700},
+    {'Customer': 'C001', 'Amount': 200},
+    {'Customer': 'C004', 'Amount': 900}
+]
+
+transactions_df = pd.DataFrame(transactions_data)
+total_spent_per_customer = transactions_df.groupby('Customer')['Amount'].sum()
+
+# 6. Exception Handling:
+
+# Function to handle division by zero
+def divide(a, b):
+    try:
+        result = a / b
+        return result
+    except ZeroDivisionError:
+        return "Cannot divide by zero"
+
+# Function to handle file operations with error handling and logging
+import logging
+
+logging.basicConfig(filename="errors.log", format='%(asctime)s %(message)s', filemode='w')
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+def process_files(file_paths):
+    for file_path in file_paths:
+        try:
+            with open(file_path, 'r') as file:
+                content = file.read()
+                # Process file content here
+        except FileNotFoundError:
+            print("File not found")
+            logger.error(f"File not found: {file_path}")
+        except PermissionError:
+            print("Permission denied")
+            logger.error(f"Permission denied: {file_path}")
+        except IOError:
+            print("Error reading file")
+            logger.error(f"Error reading file: {file_path}")
+
+# 7. Working with Dates:
+
+# Function to convert date strings to YYYY-MM-DD format
+def format_dates(date_list):
+    formatted_dates = []
+    for date_str in date_list:
+        d = datetime.strptime(date_str, "%Y-%m-%d")
+        formatted_dates.append(d.strftime("%Y-%m-%d"))
+    return formatted_dates
+
+# Function to calculate business days between two dates
+def count_business_days(start_date, end_date):
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    business_days = sum(1 for day in range((end - start).days + 1) if (start + timedelta(day)).weekday() < 5)
+    return business_days
+
+# 8. ETL Process:
+
+# Sample ETL process
+def extract_transactions(data):
+    return pd.DataFrame(data)
+
+def normalize_values(df, columns):
+    min_max_scaler = MinMaxScaler()
+    df[columns] = min_max_scaler.fit_transform(df[columns])
+    return df
+
+def check_data_quality(df):
+    quality_issues = []
+    if df.isnull().values.any():
+        quality_issues.append("Missing values found")
+    z_scores = np.abs((df[columns] - df[columns].mean()) / df[columns].std())
+    if (z_scores > 3).any().any():
+        quality_issues.append("Outliers detected")
+    return quality_issues
+
+def load_processed_data(df):
+    return df
+
+transactions_list = [
+    {'Date': '2024-01-01', 'ID': 101, 'Product': 'Product A', 'Quantity': 50, 'Amount': 500, 'Customer': 'C001', 'Region': 'North'},
+    {'Date': '2024-01-01', 'ID': 102, 'Product': 'Product B', 'Quantity': 30, 'Amount': 300, 'Customer': 'C002', 'Region': 'South'},
+    {'Date': '2024-02-01', 'ID': 101, 'Product': 'Product A', 'Quantity': 70, 'Amount': 700, 'Customer': 'C003', 'Region': 'East'},
+    {'Date': '2024-02-01', 'ID': 103, 'Product': 'Product C', 'Quantity': 20, 'Amount': 200, 'Customer': 'C001', 'Region': 'West'},
+    {'Date': '2024-03-01', 'ID': 102, 'Product': 'Product B', 'Quantity': 90, 'Amount': 900, 'Customer': 'C004', 'Region': 'North'},
+    {'Date': '2024-04-01', 'ID': 101, 'Product': 'Product A', 'Quantity': 80, 'Amount': 800, 'Customer': 'C001', 'Region': 'North'},
+]
+
+transactions_df = extract_transactions(transactions_list)
+columns = ['Quantity', 'Amount']
+transactions_transformed = normalize_values(transactions_df.copy(), columns)
+data_quality_issues = check_data_quality(transactions_transformed)
+
+if data_quality_issues:
+    print("Issues found:", data_quality_issues)
+else:
+    processed_data = load_processed_data(transactions_transformed)
+    print(processed_data)
