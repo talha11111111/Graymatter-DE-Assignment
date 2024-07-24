@@ -1,0 +1,313 @@
+DATA ENGINEERING ASSIGNMENT 02
+
+--1a
+select top 10 *
+from Person.Person
+
+select * 
+from  Production.Product  
+where Color='Red'
+
+
+
+--2a
+select ProductID,AVG(ListPrice)
+from Production.Product 
+group by ProductID
+
+--2b
+SELECT DepartmentID, COUNT(*) AS NumberOfEmployees
+FROM HumanResources.EmployeeDepartmentHistory
+GROUP BY DepartmentID;
+
+
+--3a
+SELECT h.SalesOrderNumber, d.ProductID
+FROM Sales.SalesOrderHeader AS h
+JOIN Sales.SalesOrderDetail AS d
+ON h.SalesOrderID = d.SalesOrderID;
+
+--3b
+select * from Sales.Customer  
+select * from Person.Person 
+
+SELECT p.FirstName, p.LastName, pe.EmailAddress
+FROM Sales.Customer AS c
+JOIN Person.Person AS p
+ON c.PersonID = p.BusinessEntityID
+JOIN Person.EmailAddress AS pe
+ON p.BusinessEntityID = pe.BusinessEntityID;
+
+--4a
+UPDATE Person.PersonPhone
+SET PhoneNumber = '1234456789'
+WHERE BusinessEntityID = 5;
+
+--4b
+DELETE FROM Sales.ShoppingCartItem
+WHERE Quantity = 1;
+
+
+--6a
+CREATE INDEX idx_SalesOrderNumber
+ON Sales.SalesOrderHeader (SalesOrderNumber);
+
+--6b
+DROP INDEX IX_Product_Name
+ON Production.Product;
+
+--7a
+CREATE VIEW ProductView AS
+SELECT ProductID, Name, ProductNumber
+FROM Production.Product;
+
+--7b
+CREATE VIEW SalesOrderView AS
+SELECT h.SalesOrderID, h.OrderDate, h.TotalDue
+FROM Sales.SalesOrderHeader AS h
+JOIN Sales.SalesOrderDetail AS d
+ON h.SalesOrderID = d.SalesOrderID;
+
+--8a
+CREATE TABLE Account (
+    AccountID VARCHAR(10) PRIMARY KEY,
+    Balance DECIMAL(18, 2) NOT NULL
+);
+INSERT INTO Account (AccountID, Balance)
+VALUES ('A', 1000.00),  
+       ('B', 500.00);   
+
+BEGIN TRANSACTION;
+
+UPDATE Account
+SET Balance = Balance - 500
+WHERE AccountID = 'A';
+
+UPDATE Account
+SET Balance = Balance + 500
+WHERE AccountID = 'B';
+
+COMMIT TRANSACTION;
+
+--8b
+BEGIN TRANSACTION;
+
+INSERT INTO Sales.SpecialOffer (SpecialOfferID, Description, DiscountPct, StartDate, EndDate)
+VALUES (1001, 'Winter Clearance', 20.00, '2024-12-01', '2024-12-31');
+
+UPDATE Production.Product
+SET ModifiedDate = GETDATE()
+WHERE ProductID = 100; 
+
+COMMIT TRANSACTION;
+
+--8c 
+SQL Server uses locks to manage simultaneous updates and prevent conflicts, and it handles issues like deadlocks automatically to keep data consistent.
+
+
+--9a
+CREATE PROCEDURE dbo.InsertCurrency
+    @CurrencyCode CHAR(3),
+    @Name NVARCHAR(50),
+    @ModifiedDate DATETIME
+AS
+BEGIN
+    INSERT INTO Sales.Currency (CurrencyCode, Name, ModifiedDate)
+    VALUES (@CurrencyCode, @Name, @ModifiedDate);
+END;
+
+--9b
+CREATE PROCEDURE dbo.UpdateCurrency
+    @CurrencyCode CHAR(3),
+    @NewName NVARCHAR(50),
+    @NewModifiedDate DATETIME
+AS
+BEGIN
+    UPDATE Sales.Currency
+    SET Name = @NewName,
+    ModifiedDate = @NewModifiedDate
+    WHERE CurrencyCode = @CurrencyCode;
+END;
+
+EXEC dbo.InsertCurrency
+    @CurrencyCode = 'EUR',
+    @Name = 'Euro',
+    @ModifiedDate = GETDATE();
+
+EXEC dbo.UpdateCurrency
+    @CurrencyCode = 'EUR',         
+    @NewName = 'Eurozone Euro',
+    @NewModifiedDate = GETDATE()
+
+--10a
+CREATE TRIGGER trg_UpdateCurrencyName
+ON Sales.Currency
+AFTER UPDATE
+AS
+BEGIN
+    UPDATE Sales.Currency
+    SET Name = i.Name
+    FROM inserted i
+    WHERE Sales.Currency.CurrencyCode = i.CurrencyCode;
+END;
+
+--10b
+CREATE TABLE dbo.CurrencyHistory (
+    HistoryID INT IDENTITY(1,1) PRIMARY KEY,
+    CurrencyCode CHAR(3),
+    OldName NVARCHAR(50),
+    NewName NVARCHAR(50),
+    ChangeDate DATETIME
+);
+
+
+CREATE TRIGGER trg_LogCurrencyNameChange
+ON Sales.Currency
+AFTER UPDATE
+AS
+BEGIN
+ INSERT INTO dbo.CurrencyHistory (CurrencyCode, OldName, NewName, ChangeDate)
+    SELECT 
+        d.CurrencyCode,
+        d.Name AS OldName,
+        i.Name AS NewName,
+        GETDATE() AS ChangeDate
+    FROM 
+        INSERTED i
+    INNER JOIN 
+        DELETED d
+    ON 
+        i.CurrencyCode = d.CurrencyCode
+    WHERE 
+        i.Name <> d.Name;
+END;
+
+--11a
+In the AdventureWorks database, imagine you need to track how employees job titles and roles change over time. For example, if John  starts as a "Sales Manager" and later gets promoted to a "Regional Sales Manager," you’d want to keep a complete record of both roles.
+
+Using Slowly Changing Dimension (SCD) Type 2 is perfect for this. It helps you keep a history of changes, so you don’t just see the current job title but also know about previous positions John held and the dates of those changes
+
+
+--12a
+CREATE TABLE dbo.YearlySales (
+    SalesYear INT,
+    TotalSales DECIMAL(18, 2)
+);
+
+INSERT INTO dbo.YearlySales (SalesYear, TotalSales)
+SELECT 
+    YEAR(OrderDate) AS SalesYear,
+    SUM(TotalDue) AS TotalSales
+FROM 
+    Sales.SalesOrderHeader
+GROUP BY 
+    YEAR(OrderDate);
+
+
+--12b
+The ETL process is crucial because it integrates data from various sources, ensuring that the data is accurate and consistent. It also allows for historical analysis and trend reporting, which is essential for making informed business decisions. For instance, by aggregating monthly sales into yearly summaries, businesses can track performance trends more effectively and gain valuable insights.
+Extract: First, you pull raw data from different sources. For example, you might extract sales data from the Sales.SalesOrderHeader table.
+Transform: Next, you clean and organize the data. This might involve aggregating sales figures by year or calculating totals to make the data more useful.
+Load: Finally, you load the cleaned and transformed data into a data warehouse, such as creating a new table like YearlySales to store the aggregated sales data.
+
+
+--12c
+CREATE TABLE dbo.CustomerSpend (
+    CustomerID INT PRIMARY KEY,
+    TotalSpend DECIMAL(18, 2)
+);
+
+INSERT INTO dbo.CustomerSpend (CustomerID, TotalSpend)
+SELECT 
+    c.CustomerID,
+    COALESCE(SUM(so.TotalDue), 0) AS TotalSpend
+FROM 
+    Sales.Customer c
+LEFT JOIN 
+    Sales.SalesOrderHeader so ON c.CustomerID = so.CustomerID
+GROUP BY 
+    c.CustomerID;
+
+
+
+--b
+CREATE TABLE dbo.ProductWithMarkup (
+    ProductID INT PRIMARY KEY,
+    ProductName NVARCHAR(255),
+    OriginalListPrice DECIMAL(18, 2),
+    MarkupPrice DECIMAL(18, 2)
+);
+
+INSERT INTO dbo.ProductWithMarkup (ProductID, ProductName, OriginalListPrice, MarkupPrice)
+SELECT 
+    p.ProductID,
+    p.Name AS ProductName,
+    p.ListPrice AS OriginalListPrice,
+    p.ListPrice * 1.10 AS MarkupPrice
+FROM 
+    Production.Product p;
+
+
+
+--13a
+SELECT 
+    TerritoryID,
+    SUM(TotalDue) AS TotalSalesAmount
+FROM 
+    Sales.SalesOrderHeader
+GROUP BY 
+    TerritoryID
+ORDER BY 
+    TerritoryID;
+
+--13b
+SELECT TOP 5
+    p.Name AS ProductName,
+    SUM(od.LineTotal) AS TotalSalesAmount
+FROM 
+    Sales.SalesOrderDetail od
+INNER JOIN 
+    Production.Product p ON od.ProductID = p.ProductID
+GROUP BY 
+    p.Name
+ORDER BY 
+    TotalSalesAmount DESC;
+
+
+
+--13c
+To connect Power BI to the Adventure Works database and load data:
+
+Open Power BI Desktop.
+Click Get Data, select SQL Server, and enter server details.
+Choose Sales.SalesOrderHeader and Sales.SalesOrderDetail tables and click Load.
+Create relationships between tables in the Model view.
+Build your reports in the Report view.
+Save your report when finished.
+
+
+
+--13d
+SELECT 
+    TerritoryID,
+    SUM(TotalDue) AS TotalSalesAmount
+FROM 
+    Sales.SalesOrderHeader
+WHERE 
+    OrderDate BETWEEN '2011-01-01' AND '2011-12-31'
+GROUP BY 
+    TerritoryID
+ORDER BY 
+    TotalSalesAmount DESC;
+
+select * from Sales.SalesOrderHeader
+
+
+ 
+ 
+
+ 
+
+
+ 
+
